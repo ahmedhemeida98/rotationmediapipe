@@ -193,12 +193,12 @@ def next_trial():
                         x = int(sum(hand_landmarks.landmark[i].x for i in indices) / len(indices) * frame.shape[1])
                         y = int(sum(hand_landmarks.landmark[i].y for i in indices) / len(indices) * frame.shape[0])
                     elif landmark_name == "wrist":
-                        indices = [5, 9, 13, 17]
+                        indices = [0]
                         x = int(sum(hand_landmarks.landmark[i].x for i in indices) / len(indices) * frame.shape[1])
                         y = int(sum(hand_landmarks.landmark[i].y for i in indices) / len(indices) * frame.shape[0])
                     else:
-                        landmark = getattr(mp.solutions.hands.HandLandmark, landmark_name.upper())
-                        landmark_coords = hand_landmarks.landmark[landmark]
+                        landmark_index = getattr(mp.solutions.hands.HandLandmark, landmark_name.upper())
+                        landmark_coords = hand_landmarks.landmark[landmark_index]
                         x = int(landmark_coords.x * frame.shape[1])
                         y = int(landmark_coords.y * frame.shape[0])
                     
@@ -217,7 +217,7 @@ def next_trial():
         cv2.destroyAllWindows()
 
 # Function to manually end the trial
-def end_trial():
+def end_trial(event=None):  # Add default argument to handle event
     global trial_start_time, trial_count, cap
 
     trial_end_time = time.time()
@@ -279,6 +279,7 @@ trial_message = canvas.create_text(canvas_width / 2, canvas_height - 20, text=""
 trial_label = tk.Label(root, text="", font=("Helvetica", 16))
 trial_label.pack(pady=10)
 
+
 # Create block label
 block_label = tk.Label(root, text="", font=("Helvetica", 16))
 block_label.pack(pady=10)
@@ -310,6 +311,9 @@ tk.Label(participant_id_window, text="Participant ID:").pack(pady=10)
 participant_id_entry = tk.Entry(participant_id_window)
 participant_id_entry.pack(pady=10)
 tk.Button(participant_id_window, text="Submit", command=get_participant_id).pack(pady=10)
+
+# Bind spacebar key to end_trial function
+root.bind('<space>', end_trial)
 
 # Run the main loop
 root.mainloop()
