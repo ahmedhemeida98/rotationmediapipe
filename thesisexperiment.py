@@ -193,7 +193,7 @@ def next_trial():
                         x = int(sum(hand_landmarks.landmark[i].x for i in indices) / len(indices) * frame.shape[1])
                         y = int(sum(hand_landmarks.landmark[i].y for i in indices) / len(indices) * frame.shape[0])
                     elif landmark_name == "wrist":
-                        indices = [0]
+                        indices = [0, 5, 9, 13, 17]
                         x = int(sum(hand_landmarks.landmark[i].x for i in indices) / len(indices) * frame.shape[1])
                         y = int(sum(hand_landmarks.landmark[i].y for i in indices) / len(indices) * frame.shape[0])
                     else:
@@ -278,7 +278,6 @@ trial_message = canvas.create_text(canvas_width / 2, canvas_height - 20, text=""
 # Create trial label
 trial_label = tk.Label(root, text="", font=("Helvetica", 16))
 trial_label.pack(pady=10)
-
 
 # Create block label
 block_label = tk.Label(root, text="", font=("Helvetica", 16))
