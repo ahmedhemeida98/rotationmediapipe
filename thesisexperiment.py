@@ -26,6 +26,7 @@ trial_data = []
 participant_id = None
 current_rotation_type = 1  # Initialize with a valid rotation type
 technique_sequence = []  # Will be set based on participant_id
+previous_trial_data = None  # Variable to store the previous trial's data
 
 # Example of rotational techniques dictionary
 rotation_techniques = {
@@ -100,7 +101,7 @@ def generate_target():
 def draw_target(x, y):
     target_radius = 10
     canvas.create_oval(x - target_radius, y - target_radius, x + target_radius, y + target_radius, fill='red', tags="target")
-    canvas.create_line(canvas_width / 2, canvas_height / 2, x, y, fill='green', tags="target", width=3)  # Set the line width to 5 pixels
+    canvas.create_line(canvas_width / 2, canvas_height / 2, x, y, fill='green', tags="target", width=3)  # Set the line width to 3 pixels
 
 # Function to show trial complete message
 def show_trial_complete_message():
@@ -119,8 +120,9 @@ def clear_canvas():
 
 # Function to write data to a file
 def write_data_to_file():
+    print("Writing data to file...")
     global block_count
-    filename = f"{participant_id}_{rotation_techniques[current_rotation_type]}_block_{block_count + 1}.txt"
+    filename = f"{participant_id}{rotation_techniques[current_rotation_type]}_block{block_count}.txt"
     filepath = os.path.abspath(filename)
     print(f"Saving data to: {filepath}")  # Debug print statement for the file path
     with open(filepath, "w") as file:
@@ -136,25 +138,50 @@ def start_next_block():
     trial_count = 0
     block_count += 1
     print(f"Starting next block: {block_count}")
-    if block_count < total_blocks:
+    if block_count <= total_blocks:
         if block_count % blocks_per_technique == 0:
             technique_count += 1
             current_rotation_type = technique_sequence[technique_count % total_techniques]
         start_next_block_button.pack_forget()  # Hide the button before starting the trials
+        initialize_webcam_and_mediapipe()  # Reinitialize resources for the new block
         start_trials()
     else:
         canvas.itemconfig(trial_message, text="All trials complete!")
 
+# Function to initialize webcam and MediaPipe Hands
+def initialize_webcam_and_mediapipe():
+    global cap, hands
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Could not open video capture.")
+        return
+    print("Camera successfully opened.")
+
+    mp_hands = mp.solutions.hands
+    hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
+
+# Function to close webcam and MediaPipe Hands
+def close_webcam_and_mediapipe():
+    print("Closing webcam and MediaPipe resources...")
+    global cap, hands
+    if cap is not None and cap.isOpened():
+        print("Releasing camera.")
+        cap.release()
+    if hands is not None:
+        print("Closing MediaPipe Hands.")
+        hands.close()
+    #cv2.destroyAllWindows()
+
 # Function to start the next trial
 def start_next_trial():
-    next_trial_button.pack_forget()  # Hide the button before starting the next trial
     threading.Thread(target=next_trial).start()  # Start the next trial in a separate thread
 
 def next_trial():
-    global holding_start_time, target_angle, trial_count, block_count, technique_count, current_rotation_type, cap, hands, trial_start_time
+    global holding_start_time, target_angle, trial_count, block_count, technique_count, current_rotation_type, trial_start_time
 
     if trial_count >= trials_per_block:
         print(f"Trials per block reached: {trial_count}")
+        close_webcam_and_mediapipe()  # Close the camera and MediaPipe resources after each block
         write_data_to_file()
         start_next_block_button.pack(side=tk.LEFT, padx=10)  # Show the button to start the next block
         return
@@ -171,14 +198,15 @@ def next_trial():
     holding_start_time = None  # Reset holding start time
     trial_start_time = time.time()  # Record the start time of the trial
 
-    try:
-        cap = cv2.VideoCapture(0)
-        mp_hands = mp.solutions.hands
-        hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
+    cap = cv2.VideoCapture(0)
+    mp_hands = mp.solutions.hands
+    hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
+    try:
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
+                print("Error: Failed to capture image.")
                 break
 
             frame = cv2.flip(frame, 1)
@@ -214,11 +242,11 @@ def next_trial():
         print(f"An error occurred: {e}")
     finally:
         cap.release()
+        hands.close()
         cv2.destroyAllWindows()
 
-# Function to manually end the trial
 def end_trial(event=None):  # Add default argument to handle event
-    global trial_start_time, trial_count, cap
+    global trial_start_time, trial_count
 
     trial_end_time = time.time()
     duration = int((trial_end_time - trial_start_time) * 1000)  # Duration in milliseconds
@@ -231,22 +259,22 @@ def end_trial(event=None):  # Add default argument to handle event
         "target_angle": target_angle,
         "current_angle": final_current_angle
     })
+    store_previous_trial_data()  # Store the previous trial data
     show_trial_complete_message()
-    if cap.isOpened():
-        cap.release()  # Release the webcam for the next trial
     if trial_count < trials_per_block:
         next_trial_button.pack(side=tk.LEFT, padx=10)  # Ensure the button to start the next trial is visible
     else:
         print("Completed all trials in the block. Preparing to save data and start the next block.")
+        close_webcam_and_mediapipe()  # Close the camera and MediaPipe resources after the block ends
         write_data_to_file()  # Ensure this is called to save the data
         start_next_block_button.pack(side=tk.LEFT, padx=10)  # Show the button to start the next block
 
-# Function to start the trials
+    redo_trial_button.pack(side=tk.LEFT, padx=10)  # Show the redo button
+
 def start_trials():
     start_button.pack_forget()  # Hide the start button after trials start
     start_next_trial()  # Start the first trial
 
-# Function to get participant ID and set rotation sequence
 def get_participant_id():
     global participant_id, current_rotation_type, technique_sequence
     participant_id = int(participant_id_entry.get())
@@ -256,6 +284,44 @@ def get_participant_id():
         current_rotation_type = technique_sequence[0]  # Initialize with the first technique in the sequence
         root.deiconify()
         update_trial_label()  # Update labels with initial values
+
+def store_previous_trial_data():
+    global previous_trial_data
+    previous_trial_data = {
+        "trial": trial_count,
+        "duration": int((time.time() - trial_start_time) * 1000),  # Duration in milliseconds
+        "target_angle": target_angle,
+        "current_angle": current_angle
+    }
+
+def redo_previous_trial():
+    global trial_count, trial_data, previous_trial_data, target_angle, current_angle, trial_start_time
+
+    if previous_trial_data:
+        # Decrement trial count to redo the previous trial
+        trial_count -= 1
+
+        # Remove the last trial data entry if it exists
+        if trial_data:
+            trial_data.pop()
+
+        # Reset angles and start time
+        target_angle = previous_trial_data["target_angle"]
+        current_angle = previous_trial_data["current_angle"]
+        trial_start_time = time.time()
+
+        # Redraw target and update trial label
+        clear_canvas()
+        draw_target(int(canvas_width / 2 + target_radius * math.cos(target_angle)),
+                    int(canvas_height / 2 + target_radius * math.sin(target_angle)))
+        update_trial_label()
+        print("Redoing previous trial...")
+
+        # Hide redo button until the trial is completed again
+        redo_trial_button.pack_forget()
+
+        # Start the trial again
+        threading.Thread(target=next_trial).start()
 
 # Create main window
 root = tk.Tk()
@@ -303,6 +369,10 @@ end_trial_button.pack(side=tk.LEFT, padx=10)
 start_next_block_button = tk.Button(root, text="Start Next Block", command=start_next_block)
 start_next_block_button.pack_forget()
 
+# Create redo previous trial button (initially hidden)
+redo_trial_button = tk.Button(root, text="Redo Previous Trial", command=redo_previous_trial)
+redo_trial_button.pack_forget()
+
 # Create participant ID input window
 participant_id_window = tk.Toplevel(root)
 participant_id_window.title("Enter Participant ID")
@@ -313,6 +383,9 @@ tk.Button(participant_id_window, text="Submit", command=get_participant_id).pack
 
 # Bind spacebar key to end_trial function
 root.bind('<space>', end_trial)
+
+# Initialize webcam and MediaPipe Hands before starting
+initialize_webcam_and_mediapipe()
 
 # Run the main loop
 root.mainloop()
